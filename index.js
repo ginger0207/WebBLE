@@ -6,6 +6,7 @@ const customCharacteristicUUID = "0000ffe1-0000-1000-8000-00805f9b34fb";
 
 let button_connection = document.getElementById("ble-connection");
 let button_disconnection = document.getElementById("ble-disconnection");
+let button_scanQRcode = document.getElementById("scanQRcode");
 let logText = document.getElementById("log");
 
 let dataBuffer = null;
@@ -19,6 +20,61 @@ button_connection.addEventListener("click", (event) => {
 button_disconnection.addEventListener("click", (event) => {
   disconnect(event);
 });
+
+button_scanQRcode.addEventListener("click", (event) => {
+  scannerState.toggleState();
+  if (!scannerState.init) {
+    scannerState.init = true;
+  }
+});
+
+class ScannerState {
+  constructor() {
+    this.state = "off";
+    this.init = false;
+    this.scanner = null;
+    this.camera = null;
+  }
+  toggleState() {
+    if (this.state === "off") {
+      this.state = "on";
+      this.startScanning();
+      button_scanQRcode.innerText = "Stop scanning";
+      let videoContainer = document.querySelector(".video");
+      videoContainer.style.display = "block";
+    } else if (this.state === "on") {
+      this.state = "off";
+      this.scanner.stop();
+      button_scanQRcode.innerText = "Scan QRcode";
+      let videoContainer = document.querySelector(".video");
+      videoContainer.style.display = "none";
+    }
+  }
+  startScanning() {
+    this.scanner = new Instascan.Scanner({ video: document.getElementById('preview') });
+    this.scanner.addListener('scan', (content) => {
+      // console.log(content);
+      log(`From QRcode: ${content}`);
+      if (content) {
+        this.toggleState();
+      }
+    });
+    Instascan.Camera.getCameras()
+      .then((cameras) => {
+        console.log(cameras);
+        if (cameras.length > 0) {
+          this.camera = cameras[0];
+          this.scanner.start(cameras[0]);
+        } else {
+          console.error('No cameras found.');
+        }
+    }).catch(function (e) {
+      console.error(e);
+    });
+  }
+};
+
+let scannerState = new ScannerState();
 
 function log(v, mode) {
   // var line = Array.prototype.slice.call(arguments).map(function(argument) {
@@ -37,11 +93,17 @@ function log(v, mode) {
 
 function connect(event) {
   navigator.bluetooth.requestDevice({
-    acceptAllDevices: true,
+    filters: [
+      {
+        namePrefix: "Arduino"
+      }
+    ],
+    // acceptAllDevices: true,
     optionalServices: [customServiceUUID]
   })
   .then(device => {
     bleDevice = device;
+    sessionStorage.lastDevice = device.id;
     log(`Device name: ${device.name}`);
     connected = true;
     return device.gatt.connect();
@@ -107,7 +169,6 @@ function getData(event) {
 }
 
 /* Utils */
-
 function getSupportedProperties(characteristic) {
   let supportedProperties = [];
   for (const p in characteristic.properties) {

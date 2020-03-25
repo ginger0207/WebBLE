@@ -33,3 +33,13 @@ body {
 .log {
   background-color: aliceblue;
 }
+
+.video {
+  width: 50%;
+  height: auto;
+  text-align: center;
+}
+
+#preview {
+  width: 100%;
+}
