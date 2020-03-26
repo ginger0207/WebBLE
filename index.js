@@ -51,7 +51,10 @@ class ScannerState {
     }
   }
   startScanning() {
-    this.scanner = new Instascan.Scanner({ video: document.getElementById('preview') });
+    this.scanner = new Instascan.Scanner({ 
+      video: document.getElementById('preview'),
+      mirror: false
+    });
     this.scanner.addListener('scan', (content) => {
       // console.log(content);
       log(`From QRcode: ${content}`);
@@ -63,8 +66,8 @@ class ScannerState {
       .then((cameras) => {
         console.log(cameras);
         if (cameras.length > 0) {
-          this.camera = cameras[0];
-          this.scanner.start(cameras[0]);
+          this.camera = cameras[cameras.length - 1];
+          this.scanner.start(cameras[cameras.length - 1]);
         } else {
           console.error('No cameras found.');
         }
