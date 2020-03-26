@@ -11,14 +11,16 @@ let logText = document.getElementById("log");
 
 let dataBuffer = null;
 let bleDevice = null;
+let bleDeviceName = null;
 let connected = false;
 
 button_connection.addEventListener("click", (event) => {
-  connect(event);
+  bleDeviceName = null;
+  connect();
 });
 
 button_disconnection.addEventListener("click", (event) => {
-  disconnect(event);
+  disconnect();
 });
 
 button_scanQRcode.addEventListener("click", (event) => {
@@ -56,10 +58,12 @@ class ScannerState {
       mirror: false
     });
     this.scanner.addListener('scan', (content) => {
-      // console.log(content);
+      console.log(content);
+      bleDeviceName = content;
       log(`From QRcode: ${content}`);
       if (content) {
         this.toggleState();
+        connect();
       }
     });
     Instascan.Camera.getCameras()
@@ -94,16 +98,24 @@ function log(v, mode) {
   // console.log(line);
 }
 
-function connect(event) {
-  navigator.bluetooth.requestDevice({
-    filters: [
-      {
-        namePrefix: "Arduino"
-      }
-    ],
-    // acceptAllDevices: true,
-    optionalServices: [customServiceUUID]
-  })
+function connect() {
+  let constraint;
+  if (bleDeviceName) {
+    constraint = {
+      filters: [
+        {
+          name: bleDeviceName
+        }
+      ],
+      optionalServices: [customServiceUUID]
+    }
+  } else {
+    constraint = {
+      acceptAllDevices: true,
+      optionalServices: [customServiceUUID]
+    }
+  }
+  navigator.bluetooth.requestDevice(constraint)
   .then(device => {
     bleDevice = device;
     sessionStorage.lastDevice = device.id;
@@ -137,13 +149,14 @@ function connect(event) {
     characteristic[0].startNotifications().then(res => {
       characteristic[0].addEventListener('characteristicvaluechanged', getData)
     })
+    log("listening...");
   })
   .catch(err => {
     log(err);
   })
 }
 
-function disconnect(event) {
+function disconnect() {
   if (!connected) {
     log("No device connected");
     return;
