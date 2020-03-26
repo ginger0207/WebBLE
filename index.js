@@ -118,6 +118,7 @@ function connect() {
   navigator.bluetooth.requestDevice(constraint)
   .then(device => {
     bleDevice = device;
+    bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
     sessionStorage.lastDevice = device.id;
     log(`Device name: ${device.name}`);
     connected = true;
@@ -132,17 +133,6 @@ function connect() {
     log('Getting Characteristics...');
     console.log(service);
     return service.getCharacteristics(customCharacteristicUUID);
-    // let queue = Promise.resolve();
-    // services.forEach(service => {
-    //   queue = queue.then(_ => service.getCharacteristics().then(characteristics => {
-    //     log('> Service: ' + service.uuid);
-    //     characteristics.forEach(characteristic => {
-    //       log('>> Characteristic: ' + characteristic.uuid + ' ' +
-    //           getSupportedProperties(characteristic));
-    //     });
-    //   }));
-    // });
-    // return queue;
   })
   .then(characteristic => {
     console.log(characteristic[0]);
@@ -171,6 +161,22 @@ function disconnect() {
   connected = false;
 }
 
+function onDisconnected() {
+  log("> Bluetooth Device disconnected");
+  exponentialBackoff(10, 5,
+    function toTry() {
+      time("Connecting to Bluetooth Device...");
+      return bleDevice.gatt.connect();
+    },
+    function success() {
+      log("> Bluetooth Device connected.");
+      log("litsening...")
+    },
+    function fail() {
+      time("Failed to reconnect.");
+    });
+}
+
 function getData(event) {
   console.log(event);
   console.log(event.target.value);
@@ -193,4 +199,24 @@ function getSupportedProperties(characteristic) {
     }
   }
   return '[' + supportedProperties.join(', ') + ']';
+}
+
+// This function keeps calling "toTry" until promise resolves or has
+// retried "max" number of times. First retry has a delay of "delay" seconds.
+// "success" is called upon success.
+function exponentialBackoff(maxRetry, delay, toTry, success, fail) {
+  toTry().then(result => success(result))
+  .catch(_ => {
+    if (maxRetry === 0) {
+      return fail();
+    }
+    time('Retrying in ' + delay + 's... (' + maxRetry + ' tries left)');
+    setTimeout(function() {
+      exponentialBackoff(--maxRetry, delay * 2, toTry, success, fail);
+    }, delay * 1000);
+  });
+}
+
+function time(text) {
+  log('[' + new Date().toJSON().substr(11, 8) + '] ' + text);
 }
