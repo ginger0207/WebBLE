@@ -6,13 +6,19 @@ const customCharacteristicUUID = "0000ffe1-0000-1000-8000-00805f9b34fb";
 
 let button_connection = document.getElementById("ble-connection");
 let button_disconnection = document.getElementById("ble-disconnection");
+let button_selectDevice = document.getElementById("selectKnownDevice");
 let button_scanQRcode = document.getElementById("scanQRcode");
 let logText = document.getElementById("log");
+let selectOption = document.querySelector(".selectDevices");
+let aliasSubmit = document.querySelector(".aliasSubmit");
+let selectSubmit = document.querySelector(".selectSubmit");
 
 let dataBuffer = null;
 let bleDevice = null;
 let bleDeviceName = null;
-let connected = false;
+let isConnected = false;
+
+let deviceAlias = {};
 
 button_connection.addEventListener("click", (event) => {
   bleDeviceName = null;
@@ -29,6 +35,44 @@ button_scanQRcode.addEventListener("click", (event) => {
     scannerState.init = true;
   }
 });
+
+if (localStorage.getItem("deviceName")) {
+  button_selectDevice.style.display = "block";
+}
+button_selectDevice.addEventListener("click", (event) => {
+  let devices = JSON.parse(localStorage.getItem("deviceName"));
+  let optionString = "";
+  for (device in devices) {
+    optionString += `<option value="${device}">${devices[device]}</option>`;
+    console.log(`${device}: ${devices[device]}`);
+  }
+  selectOption.style.display = "block";
+  selectOption.innerHTML = 
+  `<form>
+  <span style="color: aliceblue;">select you device: <span>
+  <select name="Device" id="selectedDevice">`
+  + optionString
+  +`<input type="submit" value="Connect" class="btn btn-primary btn-sm selectSubmit ml-2 mr-2">
+  </select>
+  </form>`;
+
+  let selectAndConnect = document.querySelector(".selectSubmit")
+  selectAndConnect.addEventListener("click", (event) => {
+    event.preventDefault();
+    let selected = document.getElementById("selectedDevice");
+    bleDeviceName = selected.options[selected.selectedIndex].value;
+    console.log(selected.options[selected.selectedIndex].value);
+    connect();
+  });
+});
+
+aliasSubmit.addEventListener("click", (event => {
+  let name = document.querySelector("div form input");
+  deviceAlias[bleDeviceName] = name.value;
+  localStorage.setItem("deviceName", JSON.stringify(deviceAlias));
+  name.value = "";
+  event.preventDefault();
+}));
 
 class ScannerState {
   constructor() {
@@ -118,19 +162,27 @@ function connect() {
   navigator.bluetooth.requestDevice(constraint)
   .then(device => {
     bleDevice = device;
+    isConnected = true;
     bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
     sessionStorage.lastDevice = device.id;
     log(`Device name: ${device.name}`);
-    connected = true;
+    bleDeviceName = device.name;
+    let alias = document.querySelector(".alias");
+    alias.style.display = "block";
+    button_connection.style.display = "none";
+    button_disconnection.style.display = "block";
+    button_selectDevice.style.display = "none";
+    button_scanQRcode.style.display = "none";
+    selectOption.style.display = "none";
     return device.gatt.connect();
   })
   .then(server => {
-    log('Getting Services...');
+    log("> Getting Services...", "append");
     return server.getPrimaryService(customServiceUUID);
     // return server.getPrimaryServices();
   })
   .then(service => {
-    log('Getting Characteristics...');
+    log("> Getting Characteristics...", "append");
     console.log(service);
     return service.getCharacteristics(customCharacteristicUUID);
   })
@@ -139,7 +191,7 @@ function connect() {
     characteristic[0].startNotifications().then(res => {
       characteristic[0].addEventListener('characteristicvaluechanged', getData)
     })
-    log("listening...");
+    log("> Listening...", "append");
   })
   .catch(err => {
     log(err);
@@ -147,34 +199,41 @@ function connect() {
 }
 
 function disconnect() {
-  if (!connected) {
+  if (!isConnected) {
     log("No device connected");
     return;
   }
   log("Disconnecting from Bluetooth Device...");
   if (bleDevice.gatt.connected) {
+    isConnected = false;
     bleDevice.gatt.disconnect();
-    log("finished", "append")
+    let alias = document.querySelector(".alias");
+    alias.style.display = "none";
+    button_connection.style.display = "block";
+    button_disconnection.style.display = "none";
+    button_selectDevice.style.display = "block";
+    button_scanQRcode.style.display = "block";
+    log("> finished", "append")
   } else {
     log("> Bluetooth Device is already disconnected");
   }
-  connected = false;
 }
 
 function onDisconnected() {
-  log("> Bluetooth Device disconnected");
-  exponentialBackoff(10, 5,
-    function toTry() {
-      time("Connecting to Bluetooth Device...");
-      return bleDevice.gatt.connect();
-    },
-    function success() {
-      log("> Bluetooth Device connected.");
-      log("litsening...")
-    },
-    function fail() {
-      time("Failed to reconnect.");
-    });
+  log("> Bluetooth Device disconnected", "append");
+  if (isConnected) {
+    exponentialBackoff(10, 5,
+      function toTry() {
+        time("Connecting to Bluetooth Device...", "append");
+        return bleDevice.gatt.connect();
+      },
+      function success() {
+        log("> Bluetooth Device connected.", "append");
+      },
+      function fail() {
+        time("Failed to reconnect.", "append");
+      });
+  }
 }
 
 function getData(event) {
